@@ -1,0 +1,231 @@
+# Echo Key — Monitor de teclado educativo (con interfaz gráfica)
+
+Echo Key es una aplicación de escritorio en Python que muestra en tiempo real las teclas pulsadas en el ordenador. Nació como ejercicio para entender, por dentro, cómo funciona un keylogger: cómo se capturan eventos del sistema operativo, cómo se coordina un hilo secundario con una interfaz gráfica, y cómo se presentan esos datos sin bloquear la ventana.
+
+No está pensada para vigilar a nadie. Cada sesión de captura pide consentimiento explícito antes de empezar, y mientras está activa se ve en pantalla, en todo momento, qué se está registrando.
+
+## Índice
+
+- [Objetivo del proyecto](#objetivo-del-proyecto)
+- [Aviso legal y ético](#aviso-legal-y-ético)
+- [Funcionalidades](#funcionalidades)
+- [Compatibilidad con sistemas operativos](#compatibilidad-con-sistemas-operativos)
+- [Instalación](#instalación)
+- [Cómo usar la aplicación](#cómo-usar-la-aplicación)
+- [Crear un ejecutable](#crear-un-ejecutable)
+- [Estructura del código](#estructura-del-código)
+- [Privacidad y seguridad de los datos exportados](#privacidad-y-seguridad-de-los-datos-exportados)
+- [Bugs corregidos en esta versión](#bugs-corregidos-en-esta-versión)
+- [Posibles mejoras futuras](#posibles-mejoras-futuras)
+- [Licencia](#licencia)
+
+## Objetivo del proyecto
+
+La pregunta de partida fue concreta: ¿qué hace falta, técnicamente, para capturar pulsaciones de teclado en tiempo real y mostrarlas en una interfaz sin que la aplicación se bloquee ni se rompa? Echo Key es la respuesta a esa pregunta, y de paso sirve como proyecto de aprendizaje sobre tres temas:
+
+- Programación concurrente en Python (hilos y colas).
+- Captura de eventos del sistema operativo con `pynput`.
+- Diseño de interfaces con Tkinter.
+
+La app en sí:
+
+- Pide permiso antes de grabar nada.
+- Muestra estadísticas de escritura (teclas por minuto, distribución por tipo de tecla).
+- Guarda un historial reciente, con buscador y filtro por categoría.
+- Permite exportar ese historial a JSON o TXT si se quiere analizar después.
+
+## Aviso legal y ético
+
+Léelo antes de usar el programa:
+
+- Echo Key captura pulsaciones de teclado **a nivel de todo el sistema operativo**, no solo dentro de su propia ventana. Si lo dejas grabando y cambias a otra aplicación, esas pulsaciones también quedan registradas, incluidas las que se escriban en campos de contraseña de otras apps (el enmascarado visual de esos campos no protege nada frente a un capturador de teclado).
+- Úsalo **únicamente en tu propio equipo**, con tu propio consentimiento, y con fines educativos o de autoanálisis (por ejemplo, medir tu velocidad de escritura).
+- Capturar las pulsaciones de otra persona sin su conocimiento y consentimiento explícito es ilegal en la mayoría de países y constituye una violación grave de su privacidad. Este proyecto no está pensado para eso, y quien lo use con ese fin lo hace bajo su propia responsabilidad.
+- El historial exportado se guarda **sin cifrar**. Si escribiste una contraseña mientras la app estaba grabando, esa contraseña queda en texto plano en el archivo exportado. La aplicación muestra un aviso de seguridad tanto antes de exportar como justo después de guardar, recordando qué hacer con ese archivo.
+
+## Funcionalidades
+
+- Visualización en tiempo real de la última tecla pulsada, incluyendo combinaciones con CTRL, MAYÚS, ALT y WIN.
+- Distinción entre teclas normales, especiales (flechas, Enter, F1-F20, etc.), modificadores y combinaciones.
+- Cronómetro de sesión y cálculo de teclas por minuto (TPM).
+- Historial de las últimas 300 pulsaciones, con buscador de texto y filtro por categoría.
+- Resumen de sesión: top 10 de teclas más usadas, TPM y distribución porcentual por tipo de tecla.
+- Gráfico de barras con las 10 teclas más usadas.
+- Exportación a JSON o TXT, con confirmación previa y aviso de seguridad tras guardar.
+- Sonido opcional al pulsar cada tecla (solo en Windows; la casilla aparece desactivada en el resto).
+- Botón para limpiar toda la memoria y reiniciar contadores.
+- Parada automática de la sesión tras 30 segundos sin actividad.
+- Tecla ESC para detener la grabación al instante, en cualquier momento.
+- Aviso si el listener de teclado no consigue arrancar (por ejemplo, por falta de permisos), en lugar de quedarse en un estado inconsistente.
+
+## Compatibilidad con sistemas operativos
+
+Echo Key funciona en Windows, Linux y macOS, pero no todas las piezas se comportan igual en los tres:
+
+| Componente | Windows | Linux | macOS |
+|---|---|---|---|
+| Interfaz gráfica (Tkinter) | Sí | Sí (puede necesitar instalar el paquete `python3-tk` aparte) | Sí |
+| Captura global de teclado (`pynput`) | Sí, sin pasos extra | Sí, pero puede requerir permisos adicionales según la distribución y el entorno gráfico (X11/Wayland) | Sí, requiere conceder permisos de Accesibilidad a la aplicación (o al Terminal/IDE desde el que se ejecute) en Ajustes del Sistema |
+| Sonido al pulsar tecla (`winsound`) | Sí | No disponible; la casilla se desactiva automáticamente | No disponible; la casilla se desactiva automáticamente |
+| Exportar a JSON / TXT | Sí | Sí | Sí |
+| Generar ejecutable con PyInstaller | Sí (genera `.exe`) | Sí (genera un binario nativo de Linux) | Sí (genera un binario nativo de macOS) |
+
+Puntos a tener en cuenta:
+
+- El módulo `winsound` es exclusivo de Windows. El código lo importa dentro de un `try/except`, así que en Linux y macOS simplemente no está disponible y la casilla de sonido queda desactivada; el resto de la aplicación funciona con normalidad.
+- PyInstaller **no compila de forma cruzada**: el ejecutable que genera solo sirve para el sistema operativo en el que lo ejecutas. Para tener un `.exe` de Windows hace falta correr PyInstaller desde Windows; para un binario de Linux o macOS, desde esos sistemas.
+- En Linux, Tkinter a veces no viene incluido con el intérprete de Python del sistema y hay que instalarlo aparte (ver sección de instalación).
+
+## Instalación
+
+Se necesita Python 3.9 o superior. Para comprobar la versión instalada:
+
+```bash
+python --version
+```
+
+### 1. Clonar o descargar el repositorio
+
+```bash
+git clone https://github.com/byjone/EchoKey.git
+cd EchoKey
+```
+
+### 2. Instalar las dependencias
+
+Echo Key depende de una sola librería externa, `pynput` (Tkinter viene incluido con Python en Windows y macOS).
+
+**Windows (CMD o PowerShell):**
+```powershell
+pip install pynput
+```
+
+**Linux / macOS:**
+```bash
+pip3 install pynput
+```
+
+Si el sistema tiene varias versiones de Python instaladas y `pip` no apunta a la correcta:
+
+```bash
+python -m pip install pynput
+```
+
+**Solo en Linux:** si al ejecutar la aplicación aparece un error relacionado con `tkinter`, hay que instalar el paquete del sistema correspondiente. Por ejemplo, en distribuciones basadas en Debian/Ubuntu:
+
+```bash
+sudo apt install python3-tk
+```
+
+### 3. Ejecutar la aplicación
+
+```bash
+python echo_key.py
+```
+
+o, en Linux/macOS si el comando de Python es `python3`:
+
+```bash
+python3 echo_key.py
+```
+
+## Cómo usar la aplicación
+
+1. Abre el programa. Aparece la ventana principal, vacía.
+2. Pulsa **"▶ Iniciar sesión"**. Aparecerá un aviso pidiendo consentimiento para capturar teclas en todo el sistema; acéptalo para continuar.
+3. Empieza a escribir donde quieras: la última tecla, el historial y las estadísticas se actualizan en tiempo real.
+4. Pulsa **"⏹ Detener sesión"** (o la tecla ESC) para parar la grabación cuando quieras.
+5. Usa **"📋 Resumen"** para ver un análisis rápido de la sesión, o **"📊 Gráfico top"** para ver las teclas más usadas en forma de gráfico de barras.
+6. Usa **"💾 Exportar JSON"** o **"📄 Exportar TXT"** para guardar los datos en un archivo. La aplicación muestra un aviso de seguridad antes de guardar y otro justo después, recordando qué hacer con ese archivo antes de moverlo o compartirlo.
+7. Usa **"🗑 Limpiar"** para borrar todo lo capturado hasta el momento sin cerrar el programa.
+
+## Crear un ejecutable
+
+Para distribuir Echo Key como programa independiente, sin que quien lo use necesite tener Python instalado, se puede empaquetar con **PyInstaller**.
+
+### 1. Instalar PyInstaller
+
+**Windows (CMD o PowerShell):**
+```powershell
+pip install pyinstaller
+```
+
+**Linux / macOS:**
+```bash
+pip3 install pyinstaller
+```
+
+### 2. Generar el ejecutable
+
+**Windows (CMD o PowerShell), desde la carpeta del proyecto:**
+```powershell
+pyinstaller --onefile --windowed --name EchoKey echo_key.py
+```
+
+**Linux / macOS, desde la carpeta del proyecto:**
+```bash
+pyinstaller --onefile --windowed --name EchoKey echo_key.py
+```
+
+El comando es el mismo en los tres sistemas; lo que cambia es el tipo de archivo que se genera según desde dónde se ejecute.
+
+Explicación de cada opción:
+
+- `--onefile`: empaqueta todo en un único archivo ejecutable, en lugar de generar una carpeta con varios ficheros.
+- `--windowed`: evita que se abra una ventana de consola detrás de la interfaz gráfica.
+- `--name EchoKey`: define el nombre del ejecutable resultante (`EchoKey.exe` en Windows, `EchoKey` en Linux/macOS).
+
+El resultado aparece en la carpeta `dist/`:
+
+- Windows: `dist\EchoKey.exe`
+- Linux/macOS: `dist/EchoKey`
+
+**Importante:** PyInstaller solo genera un ejecutable válido para el sistema operativo desde el que se ejecuta. No hay compilación cruzada: si quieres un `.exe` de Windows, tienes que correr PyInstaller en Windows; si quieres un binario de Linux o macOS, tienes que hacerlo desde esos sistemas.
+
+## Estructura del código
+
+Todo el proyecto vive en un único archivo, `echo_key.py`:
+
+- **Cabecera con glosario**: al principio del archivo hay un bloque de comentarios que explica términos básicos (hilo, cola, callback, widget, candado) para quien no haya programado antes con hilos.
+- **Importaciones y comprobaciones iniciales**: carga las librerías necesarias y detecta si el sistema soporta sonido (`winsound`).
+- **Función `timestamp()`**: genera la marca de tiempo de cada evento.
+- **Clase `EchoKey`**: contiene toda la lógica de la aplicación.
+  - `_build_ui`: construye la ventana y todos sus elementos visuales.
+  - `_on_press` / `_on_release`: se ejecutan en un hilo secundario cada vez que se pulsa o suelta una tecla. Solo registran la tecla y depositan la información en una cola; nunca tocan la interfaz ni las estadísticas directamente.
+  - `_periodic_process` / `_handle_event` / `_handle_control`: se ejecutan en el hilo principal, leen la cola y son las únicas responsables de actualizar de forma segura la interfaz, las estadísticas y el historial.
+  - `_start_listener` / `_stop_listener` / `_toggle_listener` / `_reset_ui_stopped`: controlan el inicio y la parada de la captura de teclado, incluyendo el aviso al usuario si el listener no consigue arrancar.
+  - `_export_json` / `_export_txt` / `_security_reminder`: gestionan la exportación de datos junto con los avisos de seguridad correspondientes.
+  - `_check_inactivity`: pausa automáticamente la sesión si no hay actividad durante 30 segundos.
+
+El código está comentado pensando en alguien sin experiencia previa con hilos en Python: si quieres entender cómo funciona cada parte, el propio archivo `.py` es la mejor referencia.
+
+## Privacidad y seguridad de los datos exportados
+
+- Los archivos JSON/TXT generados se guardan **en texto plano**, sin cifrado de ningún tipo.
+- La aplicación muestra un aviso justo después de exportar recordando que, antes de mover ese archivo a un USB, subirlo a la nube o enviarlo por correo, conviene:
+  - Comprimirlo en un `.zip` protegido con contraseña, o cifrarlo con una herramienta como 7-Zip (AES-256) o VeraCrypt.
+  - No dejarlo en carpetas que se sincronicen automáticamente con la nube sin cifrar antes.
+  - Borrarlo de forma segura cuando ya no se necesite.
+- La aplicación captura pulsaciones de todo el sistema mientras graba, así que el historial y los archivos exportados pueden llegar a incluir contraseñas u otra información sensible si se escribió algo así durante la sesión.
+
+## Bugs corregidos en esta versión
+
+Respecto a una versión anterior del código, se corrigieron los siguientes problemas:
+
+- **Condiciones de carrera entre hilos**: las estadísticas (`self.stats`) y el conjunto de teclas presionadas (`self.pressed`) se modificaban desde el hilo del teclado y desde el hilo principal a la vez, sin ninguna protección. Ahora las estadísticas solo se tocan desde el hilo principal, y `self.pressed` está protegido con un candado (`threading.Lock`).
+- **ESC modificaba la interfaz desde el hilo equivocado**: al pulsar ESC, el hilo del teclado llamaba directamente a una función que tocaba botones de Tkinter. Ahora ESC solo pide, a través de la cola, que el hilo principal detenga la sesión.
+- **Sin manejo de fallos al arrancar el listener**: si `pynput` no conseguía arrancar (por ejemplo, por falta de permisos), el error quedaba silenciado y la interfaz se quedaba en un estado inconsistente (botón diciendo "Detener" sin estar realmente grabando). Ahora el fallo se comunica a la interfaz y se muestra un aviso con pistas según el sistema operativo.
+- **Pitido bloqueante**: el sonido opcional se reproducía dentro del propio callback de teclado, lo que podía introducir pequeños retrasos al escribir. Ahora se lanza en un hilo aparte y corto.
+- **Aviso de consentimiento poco específico**: se amplió el texto para dejar explícito que la captura es de todo el sistema, no solo de la ventana de la app, y que puede incluir contraseñas de otras aplicaciones.
+- **Sin recordatorio de seguridad tras exportar**: ahora, cada vez que se guarda un archivo JSON o TXT, aparece un aviso con pasos concretos sobre cómo tratarlo (cifrar antes de mover a un USB o a la nube, no dejarlo en carpetas sincronizadas sin cifrar, borrarlo cuando ya no haga falta).
+
+## Posibles mejoras futuras
+
+- Cifrado automático de los archivos exportados, por ejemplo pidiendo una contraseña al exportar.
+- Opción para limitar la captura solo a cuando la ventana de Echo Key tiene el foco, en lugar de a todo el sistema.
+- Gráficas de velocidad de escritura a lo largo del tiempo.
+- Empaquetado multiplataforma automatizado (por ejemplo, con GitHub Actions generando ejecutables para Windows, Linux y macOS en cada release).
+
+## Licencia
+
+Puedes usar, modificar y distribuir este proyecto libremente con fines educativos. Si lo subes a tu propio repositorio, se recomienda añadir una licencia explícita (por ejemplo, MIT) y mantener visible el aviso ético de este documento.
